@@ -3,9 +3,10 @@
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 
 
-typedef std::int64_t  int64_t;
+typedef int64_t  int64_t;
 
 
 template<typename T>
@@ -126,6 +127,15 @@ void push_into_buffer(B &b, D v)
 }
 
 
+template<typename B, typename D> inline
+void fetch_from_buffer(B &b, D v)
+{
+  auto &it = buffer_iterator<D>(b);
+  v = (*it);
+  ++it;
+}
+
+
 /// BUFFER INTEGRAL TYPES
 /// for each integral type we support. this results in some code duplication
 /// but gives better compilation errors for unsupported types and also makes
@@ -142,9 +152,7 @@ void operator << (B &b, int v)
 template<typename B> inline
 void operator >> (const B &b, int &v)
 {
-  auto &it = buffer_iterator<int>(b);
-  v = (*it);
-  ++it;
+  fetch_from_buffer(b, v);
 }
 
 
@@ -159,9 +167,7 @@ template<typename B> inline
 template<typename B> inline
   void operator >> (const B &b, int64_t &v)
 {
-  auto &it = buffer_iterator<int64_t>(b);
-  v = (*it);
-  ++it;
+  fetch_from_buffer(b, v);
 }
 
 
@@ -176,16 +182,14 @@ void operator << (B &b, double v)
 template<typename B> inline
   void operator >> (const B &b, double &v)
 {
-  auto &it = buffer_iterator<double>(b);
-  v = (*it);
-  ++it;
+  fetch_from_buffer(b, v);
 }
 
 
 /// STL CONTAINERS
 
 
-///pair
+/// pair
 
 template<typename B, typename D1, typename D2> inline
 void operator << (B &b, const std::pair<D1, D2> &c)
@@ -202,6 +206,21 @@ void operator >> (const B &b, std::pair<D1, D2> &c)
 }
 
 
+/*
+template<typename B, typename FwdIt> inline
+void insert_range (B &b, FwdIt first, FwdIt last)
+{
+  push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
+  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdIt>::reference& v){ b << v;});
+}
+
+
+template<typename B, typename D> inline
+void operator << (B &b, const std::vector<D> &c)
+{
+  insert_range(b, c.begin(), c.end());
+}
+*/
 template<typename B, typename D> inline
 void operator << (B &b, const std::vector<D> &c)
 {
@@ -225,7 +244,7 @@ void operator >> (const B &b, std::vector<D> &c)
 /// RECURSIVE, TYPE-BASED DISPATCHERS
 /// these are used for subtypes that dont have a << op 
 /// implemented, but do have user specified load/save
-/// methods. this dos namespace based lookup
+/// methods. this does namespace based lookup
 
 template<typename B, typename T> inline
 void operator << (B &b, const T &c)
@@ -255,7 +274,7 @@ void init_load(const B& b)
 template<typename O> inline
 void mpi_gather_dummy(const O &tput, O &tget)
 {
-  BufferTraits<O>::Buffer b;
+  typename BufferTraits<O>::Buffer b;
   save(b, tput);
 
   // exchange buffer arrays here...
@@ -348,6 +367,8 @@ int main()
   std::cout << std::boolalpha << (tget.double_data == tput.double_data) << "\n";
   std::cout << std::boolalpha << (tget.double_data_pairs == tput.double_data_pairs) << "\n";
   std::cout << std::boolalpha << (tget.i == tput.i) << "\n";
+
+  std::cout << tput.i << "\n";
 
 
   RecursiveType rtput;

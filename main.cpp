@@ -222,22 +222,38 @@ void operator >> (const B &b, std::vector<D> &c)
 }
 
 
+/// RECURSIVE, TYPE-BASED DISPATCHERS
+/// these are used for subtypes that dont have a << op 
+/// implemented, but do have user specified load/save
+/// methods. this dos namespace based lookup
+
+template<typename B, typename T> inline
+void operator << (B &b, const T &c)
+{
+  save(b, c);
+}
+
+template<typename B, typename T> inline
+void operator >> (const B &b, T &c)
+{  
+  load(b, c);
+}
+
+
+
 template<typename B> inline
 void init_load(const B& b)
 {
-  auto &bit_int = buffer_iterator<int>(b);
-  bit_int = buffer<int>(b).begin(); 
-  auto &bit_int64_t = buffer_iterator<int64_t>(b);
-  bit_int64_t = buffer<int64_t>(b).begin(); 
-  auto &bit_double = buffer_iterator<double>(b);
-  bit_double = buffer<double>(b).begin(); 
-  auto &bit_size = buffer_iterator<size_t>(b);
-  bit_size = buffer<size_t>(b).begin(); 
+
+  buffer_iterator<int>(b) = buffer<int>(b).begin();
+  buffer_iterator<int64_t>(b) = buffer<int64_t>(b).begin(); 
+  buffer_iterator<double>(b) = buffer<double>(b).begin(); 
+  buffer_iterator<size_t>(b) = buffer<size_t>(b).begin(); 
 }
 
 
 template<typename O> inline
-void  mpi_gather_dummy(const O &tput, O &tget)
+void mpi_gather_dummy(const O &tput, O &tget)
 {
   BufferTraits<O>::Buffer b;
   save(b, tput);
@@ -289,6 +305,25 @@ void load(const Buffer &b, SomeType &d)
 }
 
 
+struct RecursiveType
+{
+  SomeType st;
+};
+
+
+template<typename Buffer> inline
+void save(Buffer &b, const RecursiveType &d)
+{
+  b << d.st;
+}
+
+
+template<typename Buffer> inline
+void load(const Buffer &b, RecursiveType &d)
+{
+  b >> d.st;
+}
+
 int main()
 {
   // initialize
@@ -313,6 +348,12 @@ int main()
   std::cout << std::boolalpha << (tget.double_data == tput.double_data) << "\n";
   std::cout << std::boolalpha << (tget.double_data_pairs == tput.double_data_pairs) << "\n";
   std::cout << std::boolalpha << (tget.i == tput.i) << "\n";
+
+
+  RecursiveType rtput;
+  RecursiveType rtget;
+  mpi_gather_dummy(rtput, rtget);
+
 
   return 0;
 }

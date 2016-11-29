@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
+#include <list>
 #include <iterator>
 
 
@@ -186,6 +187,16 @@ template<typename B> inline
 }
 
 
+template<typename B, typename C> inline
+void fetch_and_apply_size(B &b, C &c)
+{
+  auto &bit_size = buffer_iterator<size_t>(b);
+  const auto csize = *bit_size;
+  ++bit_size;
+  c.resize(csize);
+}
+
+
 /// STL CONTAINERS
 
 
@@ -206,12 +217,12 @@ void operator >> (const B &b, std::pair<D1, D2> &c)
 }
 
 
-/*
-template<typename B, typename FwdIt> inline
-void insert_range (B &b, FwdIt first, FwdIt last)
+
+template<typename B, typename FwdOutIt> inline
+void insert_range (B &b, FwdOutIt first, FwdOutIt last)
 {
   push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
-  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdIt>::reference& v){ b << v;});
+  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdOutIt>::reference& v){ b << v;});
 }
 
 
@@ -220,24 +231,28 @@ void operator << (B &b, const std::vector<D> &c)
 {
   insert_range(b, c.begin(), c.end());
 }
-*/
+
+
 template<typename B, typename D> inline
-void operator << (B &b, const std::vector<D> &c)
+void operator << (B &b, const std::list<D> &c)
 {
-  push_into_buffer(b, c.size());
-  std::for_each(c.begin(), c.end(), [&b](const D& v){ b << v;});
+  insert_range(b, c.begin(), c.end());
 }
+
+
+template<typename B, typename FwdInIt> inline
+void fetch_range(B &b, FwdInIt first, FwdInIt last)
+{
+  std::for_each(first, last, [&b](typename std::iterator_traits<FwdInIt>::reference& v) { b >> v; });
+}
+
 
 
 template<typename B, typename D> inline
 void operator >> (const B &b, std::vector<D> &c)
 {  
-  auto &bit_size = buffer_iterator<size_t>(b);
-  const auto csize = *bit_size;
-  ++bit_size;
-
-  c.resize(csize);
-  std::for_each(c.begin(), c.end(), [&b](D& v){ b >> v;});
+  fetch_and_apply_size(b, c);
+  fetch_range(b, c.begin(), c.end());
 }
 
 
@@ -297,6 +312,7 @@ struct SomeType
   std::vector<double> double_data;
   std::vector<std::pair<double,double>> double_data_pairs;
   int64_t i;
+  std::list<double> double_list;
 };
 
 

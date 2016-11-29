@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <list>
+#include <array>
 #include <iterator>
 
 
@@ -199,44 +200,13 @@ void fetch_and_apply_size(B &b, C &c)
 
 /// STL CONTAINERS
 
-
-/// pair
-
-template<typename B, typename D1, typename D2> inline
-void operator << (B &b, const std::pair<D1, D2> &c)
-{
-  b << c.first;
-  b << c.second;
-}
-
-template<typename B, typename D1, typename D2> inline
-void operator >> (const B &b, std::pair<D1, D2> &c)
-{
-  b >> c.first;
-  b >> c.second;
-}
-
-
+/// these should be dispatched to from container entry points, require onle forward iterators
 
 template<typename B, typename FwdOutIt> inline
-void insert_range (B &b, FwdOutIt first, FwdOutIt last)
+void insert_range(B &b, FwdOutIt first, FwdOutIt last)
 {
   push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
-  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdOutIt>::reference& v){ b << v;});
-}
-
-
-template<typename B, typename D> inline
-void operator << (B &b, const std::vector<D> &c)
-{
-  insert_range(b, c.begin(), c.end());
-}
-
-
-template<typename B, typename D> inline
-void operator << (B &b, const std::list<D> &c)
-{
-  insert_range(b, c.begin(), c.end());
+  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdOutIt>::reference& v) { b << v; });
 }
 
 
@@ -247,7 +217,27 @@ void fetch_range(B &b, FwdInIt first, FwdInIt last)
 }
 
 
+/// pair
+template<typename B, typename D1, typename D2> inline
+void operator << (B &b, const std::pair<D1, D2> &c)
+{
+  b << c.first;
+  b << c.second;
+}
+template<typename B, typename D1, typename D2> inline
+void operator >> (const B &b, std::pair<D1, D2> &c)
+{
+  b >> c.first;
+  b >> c.second;
+}
 
+
+/// vector
+template<typename B, typename D> inline
+void operator << (B &b, const std::vector<D> &c)
+{
+  insert_range(b, c.begin(), c.end());
+}
 template<typename B, typename D> inline
 void operator >> (const B &b, std::vector<D> &c)
 {  
@@ -256,11 +246,39 @@ void operator >> (const B &b, std::vector<D> &c)
 }
 
 
+/// list
+template<typename B, typename D> inline
+void operator << (B &b, const std::list<D> &c)
+{
+  insert_range(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::list<D> &c)
+{
+  fetch_and_apply_size(b, c);
+  fetch_range(b, c.begin(), c.end());
+}
+
+/// array
+template<typename B, typename D, size_t N> inline
+void operator << (B &b, const std::array<D, N> &c)
+{
+  insert_range(b, c.begin(), c.end());
+}
+template<typename B, typename D, size_t N> inline
+void operator >> (const B &b, std::array<D, N> &c)
+{
+  // fixed width - no resize here
+  fetch_range(b, c.begin(), c.end());
+}
+
+
 /// RECURSIVE, TYPE-BASED DISPATCHERS
 /// these are used for subtypes that dont have a << op 
 /// implemented, but do have user specified load/save
 /// methods. this does namespace based lookup
-/*
+
+
 template<typename B, typename T> inline
 void operator << (B &b, const T &c)
 {
@@ -273,7 +291,6 @@ void operator >> (const B &b, T &c)
   load(b, c);
 }
 
-*/
 
 template<typename B> inline
 void init_load(const B& b)
@@ -313,6 +330,7 @@ struct SomeType
   std::vector<std::pair<double,double>> double_data_pairs;
   int64_t i;
   std::list<double> double_list;
+  std::array<int, 3> int_array;
 };
 
 
@@ -325,6 +343,8 @@ void save(Buffer &b, const SomeType &d)
   b << d.double_data;
   b << d.double_data_pairs;
   b << d.i;
+  b << d.double_list;
+  b << d.int_array;
 }
 
 
@@ -337,6 +357,8 @@ void load(const Buffer &b, SomeType &d)
   b >> d.double_data;
   b >> d.double_data_pairs;
   b >> d.i;
+  b >> d.double_list;
+  b >> d.int_array;
 }
 
 
@@ -345,7 +367,7 @@ struct RecursiveType
   SomeType st;
 };
 
-/*
+
 template<typename Buffer> inline
 void save(Buffer &b, const RecursiveType &d)
 {
@@ -358,7 +380,8 @@ void load(const Buffer &b, RecursiveType &d)
 {
   b >> d.st;
 }
-*/
+
+
 int main()
 {
   // initialize
@@ -369,6 +392,8 @@ int main()
   tput.pair_data.second = 3;
   tput.double_data.insert(tput.double_data.begin(), 12, 1.2);
   tput.double_data_pairs.insert(tput.double_data_pairs.begin(), 12, std::make_pair(2.,9.));
+  tput.int_array[0] = 12;
+  tput.int_array[1] = 8;
   tput.i = 880; 
  
   // exchange
@@ -383,13 +408,15 @@ int main()
   std::cout << std::boolalpha << (tget.double_data == tput.double_data) << "\n";
   std::cout << std::boolalpha << (tget.double_data_pairs == tput.double_data_pairs) << "\n";
   std::cout << std::boolalpha << (tget.i == tput.i) << "\n";
+  std::cout << std::boolalpha << (tget.double_list == tput.double_list) << "\n";
+  std::cout << std::boolalpha << (tget.int_array == tput.int_array) << "\n";
 
   std::cout << tput.i << "\n";
 
 
   RecursiveType rtput;
   RecursiveType rtget;
-  //mpi_gather_dummy(rtput, rtget);
+  mpi_gather_dummy(rtput, rtget);
 
   std::cin.get();
   return 0;

@@ -128,7 +128,7 @@ void push_into_buffer(B &b, D v)
 
 
 template<typename B, typename D> inline
-void fetch_from_buffer(B &b, D v)
+void fetch_from_buffer(const B &b, D &v)
 {
   auto &it = buffer_iterator<D>(b);
   v = (*it);
@@ -245,7 +245,7 @@ void operator >> (const B &b, std::vector<D> &c)
 /// these are used for subtypes that dont have a << op 
 /// implemented, but do have user specified load/save
 /// methods. this does namespace based lookup
-
+/*
 template<typename B, typename T> inline
 void operator << (B &b, const T &c)
 {
@@ -258,7 +258,7 @@ void operator >> (const B &b, T &c)
   load(b, c);
 }
 
-
+*/
 
 template<typename B> inline
 void init_load(const B& b)
@@ -329,7 +329,7 @@ struct RecursiveType
   SomeType st;
 };
 
-
+/*
 template<typename Buffer> inline
 void save(Buffer &b, const RecursiveType &d)
 {
@@ -342,7 +342,7 @@ void load(const Buffer &b, RecursiveType &d)
 {
   b >> d.st;
 }
-
+*/
 int main()
 {
   // initialize
@@ -373,9 +373,9 @@ int main()
 
   RecursiveType rtput;
   RecursiveType rtget;
-  mpi_gather_dummy(rtput, rtget);
+  //mpi_gather_dummy(rtput, rtget);
 
-
+  std::cin.get();
   return 0;
 }
 

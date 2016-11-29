@@ -12,6 +12,10 @@ struct BufferTraits
 
 struct OBufferIts
 {
+  typedef std::vector<size_t> BCSizes;
+  typedef BCSizes::const_iterator BCSit;
+
+  BCSit bi_sizes;
   BufferTraits<int>::BCIterator bi_int;
 };
 
@@ -19,9 +23,7 @@ struct OBufferIts
 template<typename O>
 struct OBuffer
 {
-  typedef std::vector<size_t> BCSizes;
-
-  BCSizes bc_sizes;
+  OBufferIts::BCSizes bc_sizes;
   typename BufferTraits<int>::BCType bc_int;
   mutable OBufferIts its;
 };
@@ -48,6 +50,23 @@ namespace traits
       return b.its.bi_int;
     }
   };
+
+  template<typename B>
+  struct access<size_t, B>
+  {
+    static typename BufferTraits<size_t>::BCType& buffer(B &b)
+    {
+      return b.bc_sizes;
+    }
+    static const typename BufferTraits<size_t>::BCType& buffer(const B &b)
+    {
+      return b.bc_sizes;
+    }
+    static typename BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b)
+    {
+      return b.its.bi_sizes;
+    }
+  };
 }
 
 
@@ -72,33 +91,27 @@ typename BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
 }
 
 
-template<typename O>
-typename OBuffer<O>::BCSizes& sizes(OBuffer<O> &b)
-{
-  return b.bc_sizes;
-}
-
-
 template<typename B, typename D>
-B& operator << (B &b, const std::vector<D> &v)
+B& operator << (B &b, const std::vector<D> &c)
 {
   auto &bc = buffer<D>(b);
-  auto &bs = sizes(b);
-  bs.push_back(v.size());
-  bc.insert(bc.end(), v.begin(), v.end());
+  auto &bs = buffer<size_t>(b);
+  bs.push_back(c.size());
+  bc.insert(bc.end(), c.begin(), c.end());
   return b;
 }
 
 
 template<typename B, typename D>
-const B& operator >> (const B &b, std::vector<D> &v)
-{
-  auto &bc = buffer<D>(b);
-  /*
-  auto &bs = sizes(b);
-  bs.push_back(v.size());
-  bc.insert(bc.end(), v.begin(), v.end());
-  */
+const B& operator >> (const B &b, std::vector<D> &c)
+{  
+  auto &bit_size = buffer_iterator<size_t>(b);
+  const auto csize = *bit_size;
+  ++bit_size;
+
+  c.resize(csize);
+  auto &bit = buffer_iterator<D>(b);
+  std::copy(bit, bit+csize, c.begin());
   return b;
 }
 
@@ -106,11 +119,11 @@ const B& operator >> (const B &b, std::vector<D> &v)
 template<typename B>
 void init_load(const B& b)
 {
-  auto &bit = buffer_iterator<int>(b);
-  bit = buffer<int>(b).begin(); 
+  auto &bit_int = buffer_iterator<int>(b);
+  bit_int = buffer<int>(b).begin(); 
+  auto &bit_size = buffer_iterator<size_t>(b);
+  bit_size = buffer<size_t>(b).begin(); 
 }
-
-
 
 
 /////////////////////////////////////////////////////

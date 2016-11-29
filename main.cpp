@@ -1,5 +1,7 @@
 #include <iostream>
 #include <vector>
+#include <type_traits>
+#include <algorithm>
 
 
 template<typename T>
@@ -91,13 +93,20 @@ typename BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
 }
 
 
+template<typename B>
+B& operator << (B &b, int v)
+{
+  buffer<int>(b).push_back(v);
+  return b;
+}
+
+
 template<typename B, typename D>
 B& operator << (B &b, const std::vector<D> &c)
 {
-  auto &bc = buffer<D>(b);
   auto &bs = buffer<size_t>(b);
   bs.push_back(c.size());
-  bc.insert(bc.end(), c.begin(), c.end());
+  std::for_each(c.begin(), c.end(), [&b](const D& v){ b << v;});
   return b;
 }
 
@@ -157,6 +166,7 @@ int main()
   SomeType tget;
   init_load(b);
   load(b, tget);
+  std::cout << std::boolalpha << (tget.data == tput.data) << "\n";
   return 0;
 }
 

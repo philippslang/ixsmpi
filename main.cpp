@@ -9,37 +9,39 @@ typedef std::int64_t  int64_t;
 
 
 template<typename T>
-struct BufferTraits
+struct _BufferTraits
 {
   typedef std::vector<T> BCType;
   typedef typename BCType::const_iterator BCIterator;
 }; 
 
 
-struct OBufferIts
+struct _OBufferIts
 {
   typedef std::vector<size_t> BCSizes;
   typedef BCSizes::const_iterator BCSit;
 
   BCSit bi_sizes;
-  BufferTraits<int>::BCIterator bi_int;
-  BufferTraits<int64_t>::BCIterator bi_int64_t;
-  BufferTraits<double>::BCIterator bi_double;
+  _BufferTraits<int>::BCIterator bi_int;
+  _BufferTraits<int64_t>::BCIterator bi_int64_t;
+  _BufferTraits<double>::BCIterator bi_double;
 };
 
 
 template<typename O>
-struct OBuffer
+struct _OBuffer
 {
-  OBufferIts::BCSizes bc_sizes;
-  typename BufferTraits<int>::BCType bc_int;
-  typename BufferTraits<int64_t>::BCType bc_int64_t;
-  typename BufferTraits<double>::BCType bc_double;
-  mutable OBufferIts its;
+  _OBufferIts::BCSizes bc_sizes;
+  typename _BufferTraits<int>::BCType bc_int;
+  typename _BufferTraits<int64_t>::BCType bc_int64_t;
+  typename _BufferTraits<double>::BCType bc_double;
+
+  /// because this just keeps track of the state of deserialization - no changes to the buffer itself
+  mutable _OBufferIts its; 
 };
 
 
-namespace __traits
+namespace _traits
 {  
   template<typename T, typename B>
   struct access{};
@@ -47,60 +49,70 @@ namespace __traits
   template<typename B>
   struct access<int, B>
   {
-    static typename BufferTraits<int>::BCType& buffer(B &b) { return b.bc_int; }
-    static const typename BufferTraits<int>::BCType& buffer(const B &b) { return b.bc_int; }
-    static typename BufferTraits<int>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int; }
+    static typename _BufferTraits<int>::BCType& buffer(B &b) { return b.bc_int; }
+    static const typename _BufferTraits<int>::BCType& buffer(const B &b) { return b.bc_int; }
+    static typename _BufferTraits<int>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int; }
   };
 
   template<typename B>
   struct access<int64_t, B>
   {
-    static typename BufferTraits<int64_t>::BCType& buffer(B &b) { return b.bc_int64_t; }
-    static const typename BufferTraits<int64_t>::BCType& buffer(const B &b) { return b.bc_int64_t; }
-    static typename BufferTraits<int64_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int64_t; }
+    static typename _BufferTraits<int64_t>::BCType& buffer(B &b) { return b.bc_int64_t; }
+    static const typename _BufferTraits<int64_t>::BCType& buffer(const B &b) { return b.bc_int64_t; }
+    static typename _BufferTraits<int64_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int64_t; }
   };
 
   template<typename B>
   struct access<double, B>
   {
-    static typename BufferTraits<double>::BCType& buffer(B &b) { return b.bc_double; }
-    static const typename BufferTraits<double>::BCType& buffer(const B &b) { return b.bc_double; }
-    static typename BufferTraits<double>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_double; }
+    static typename _BufferTraits<double>::BCType& buffer(B &b) { return b.bc_double; }
+    static const typename _BufferTraits<double>::BCType& buffer(const B &b) { return b.bc_double; }
+    static typename _BufferTraits<double>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_double; }
   };
 
   // specialized for container size buffer only, we don't allow for size_t as data type
   template<typename B>
   struct access<size_t, B>
   {
-    static typename BufferTraits<size_t>::BCType& buffer(B &b) { return b.bc_sizes; }
-    static const typename BufferTraits<size_t>::BCType& buffer(const B &b) { return b.bc_sizes; }
-    static typename BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_sizes; }
+    static typename _BufferTraits<size_t>::BCType& buffer(B &b) { return b.bc_sizes; }
+    static const typename _BufferTraits<size_t>::BCType& buffer(const B &b) { return b.bc_sizes; }
+    static typename _BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_sizes; }
   };
 }
 
 
 // convenience functions for traits access - traits won't be accessed
-// directly by anything else, only vie this interface
+// directly by anything else, only vie this interface. 
 
 template<typename T, typename B> inline
-typename BufferTraits<T>::BCType& buffer(B &b)
+typename _BufferTraits<T>::BCType& buffer(B &b)
 {
-  return __traits::access<T, B>::buffer(b);
+  return _traits::access<T, B>::buffer(b);
 }
 
 
 template<typename T, typename B> inline
-const typename BufferTraits<T>::BCType& buffer(const B &b)
+const typename _BufferTraits<T>::BCType& buffer(const B &b)
 {
-  return __traits::access<T, B>::buffer(b);
+  return _traits::access<T, B>::buffer(b);
 }
 
 
 template<typename T, typename B> inline
-typename BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
+typename _BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
 {
-  return __traits::access<T, B>::buffer_iterator(b);
+  return _traits::access<T, B>::buffer_iterator(b);
 }
+
+/// from here on, the buffer, its iterators and types should
+/// only be interfaced - via the above three functions
+
+
+template<typename T>
+struct BufferTraits
+{
+  typedef _OBuffer<T> Buffer;
+}; 
 
 
 /// this is the only external link to the type of container used in
@@ -114,7 +126,12 @@ void push_into_buffer(B &b, D v)
 }
 
 
-/// for each integral type we support 
+/// BUFFER INTEGRAL TYPES
+/// for each integral type we support. this results in some code duplication
+/// but gives better compilation errors for unsupported types and also makes
+/// for a clear bottom of recursion
+
+/// int
 
 template<typename B> inline
 void operator << (B &b, int v)
@@ -131,6 +148,8 @@ void operator >> (const B &b, int &v)
 }
 
 
+/// int64_t
+
 template<typename B> inline
   void operator << (B &b, int64_t v)
 {
@@ -145,6 +164,8 @@ template<typename B> inline
   ++it;
 }
 
+
+/// double
 
 template<typename B> inline
 void operator << (B &b, double v)
@@ -161,7 +182,10 @@ template<typename B> inline
 }
 
 
-/// stl containers
+/// STL CONTAINERS
+
+
+///pair
 
 template<typename B, typename D1, typename D2> inline
 void operator << (B &b, const std::pair<D1, D2> &c)
@@ -169,7 +193,6 @@ void operator << (B &b, const std::pair<D1, D2> &c)
   b << c.first;
   b << c.second;
 }
-
 
 template<typename B, typename D1, typename D2> inline
 void operator >> (const B &b, std::pair<D1, D2> &c)
@@ -182,8 +205,7 @@ void operator >> (const B &b, std::pair<D1, D2> &c)
 template<typename B, typename D> inline
 void operator << (B &b, const std::vector<D> &c)
 {
-  auto &bs = buffer<size_t>(b);
-  bs.push_back(c.size());
+  push_into_buffer(b, c.size());
   std::for_each(c.begin(), c.end(), [&b](const D& v){ b << v;});
 }
 
@@ -214,8 +236,21 @@ void init_load(const B& b)
 }
 
 
+template<typename O> inline
+void  mpi_gather_dummy(const O &tput, O &tget)
+{
+  BufferTraits<O>::Buffer b;
+  save(b, tput);
+
+  // exchange buffer arrays here...
+
+  init_load(b);
+  load(b, tget);
+}
+
+
 /////////////////////////////////////////////////////
-///                   USER                       ////
+////                  USER                       ////
 /////////////////////////////////////////////////////
 
 
@@ -225,6 +260,7 @@ struct SomeType
   std::vector<int> more_data;
   std::pair<int,int> pair_data;
   std::vector<double> double_data;
+  std::vector<std::pair<double,double>> double_data_pairs;
   int64_t i;
 };
 
@@ -236,6 +272,7 @@ void save(Buffer &b, const SomeType &d)
   b << d.more_data;
   b << d.pair_data;
   b << d.double_data;
+  b << d.double_data_pairs;
   b << d.i;
 }
 
@@ -247,29 +284,36 @@ void load(const Buffer &b, SomeType &d)
   b >> d.more_data;
   b >> d.pair_data;
   b >> d.double_data;
+  b >> d.double_data_pairs;
   b >> d.i;
 }
 
 
 int main()
 {
+  // initialize
   SomeType tput;
   tput.data.insert(tput.data.begin(), 10, std::vector<int>(5, 2));
   tput.more_data.insert(tput.more_data.begin(), 18, -3);
   tput.pair_data.first = 8;
   tput.pair_data.second = 3;
   tput.double_data.insert(tput.double_data.begin(), 12, 1.2);
-  tput.i = 880;
-  OBuffer<SomeType> b;
-  save(b, tput);
+  tput.double_data_pairs.insert(tput.double_data_pairs.begin(), 12, std::make_pair(2.,9.));
+  tput.i = 880; 
+ 
+  // exchange
   SomeType tget;
-  init_load(b);
-  load(b, tget);
+  mpi_gather_dummy(tput, tget);
+
+
+  // TESTS
   std::cout << std::boolalpha << (tget.data == tput.data) << "\n";
   std::cout << std::boolalpha << (tget.more_data == tput.more_data) << "\n";
   std::cout << std::boolalpha << (tget.pair_data == tput.pair_data) << "\n";
   std::cout << std::boolalpha << (tget.double_data == tput.double_data) << "\n";
+  std::cout << std::boolalpha << (tget.double_data_pairs == tput.double_data_pairs) << "\n";
   std::cout << std::boolalpha << (tget.i == tput.i) << "\n";
+
   return 0;
 }
 

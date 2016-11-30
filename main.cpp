@@ -12,12 +12,16 @@
 #include <forward_list>
 #include <list>
 
-
-
+// associative containers
+#include <set>
 
 /*
 TODO
 - reconsider const buffer concept for read buffers... std::ifstream doesnt do that
+
+LIMITATIONS
+- no pointers --> user workaround in load/save
+- no container adaptors (stack, queue, priority_queue) --> user workaround in load/save exposing underlying container
 */
 
 
@@ -160,13 +164,21 @@ void fetch_from_buffer(const B &b, D &v)
 }
 
 
-template<typename B, typename C> inline
-  void fetch_size_and_apply(B &b, C &c)
+// next stored size from buffer
+template<typename B> inline
+size_t fetch_size(B &b)
 {
   auto &bit_size = buffer_iterator<size_t>(b);
   const auto csize = *bit_size;
   ++bit_size;
-  c.resize(csize);
+  return csize;
+}
+
+
+template<typename B, typename C> inline
+void fetch_size_and_apply(B &b, C &c)
+{  
+  c.resize(fetch_size(b));
 }
 
 
@@ -221,8 +233,24 @@ template<typename B> inline
 template<typename B, typename FwdOutIt> inline
 void insert_range(B &b, FwdOutIt first, FwdOutIt last)
 {
-  std::for_each(first, last, [&b](const typename std::iterator_traits<FwdOutIt>::reference& v) { b << v; });
+  while (first != last)
+  {
+    b << *first;
+    ++first;
+  }
 }
+
+
+template<typename B, typename FwdInIt> inline
+void fetch_range(B &b, FwdInIt first, FwdInIt last)
+{
+  while (first != last)
+  {
+    b >> *first;
+    ++first;
+  }
+}
+
 
 template<typename B, typename FwdOutIt> inline
 void insert_range_and_size(B &b, FwdOutIt first, FwdOutIt last)
@@ -231,12 +259,6 @@ void insert_range_and_size(B &b, FwdOutIt first, FwdOutIt last)
   insert_range(b, first, last);
 }
 
-
-template<typename B, typename FwdInIt> inline
-void fetch_range(B &b, FwdInIt first, FwdInIt last)
-{
-  std::for_each(first, last, [&b](typename std::iterator_traits<FwdInIt>::reference& v) { b >> v; });
-}
 
 
 /// pair
@@ -324,6 +346,19 @@ void operator >> (const B &b, std::forward_list<D> &c)
 }
 
 
+/// set
+template<typename B, typename D> inline
+void operator << (B &b, const std::set<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::set<D> &c)
+{
+  
+}
+
+
 /// RECURSIVE, TYPE-BASED DISPATCHERS
 /// these are used for subtypes that dont have a << op 
 /// implemented, but do have user specified load/save
@@ -402,6 +437,7 @@ struct SomeType
   std::array<int, 3> int_array;
   std::deque<int64_t> int64_deck;
   std::forward_list<int> int_flist;
+  std::set<double> double_set;
 };
 
 
@@ -418,6 +454,7 @@ void save(Buffer &b, const SomeType &d)
   b << d.int_array;
   b << d.int64_deck;
   b << d.int_flist;
+  b << d.double_set;
 }
 
 
@@ -434,6 +471,7 @@ void load(const Buffer &b, SomeType &d)
   b >> d.int_array;
   b >> d.int64_deck;
   b >> d.int_flist;
+  b >> d.double_set;
 }
 
 
@@ -472,6 +510,9 @@ int main()
   tput.i = 880; 
   tput.int64_deck = std::deque<int64_t>(800, 123456789101112);
   tput.int_flist = std::forward_list<int>(42, -9);
+  tput.double_set.insert(1.5);
+  tput.double_set.insert(2.5);
+  tput.double_set.insert(3.0);
  
   // exchange
   SomeType tget;
@@ -489,12 +530,27 @@ int main()
   std::cout << std::boolalpha << (tget.int_array == tput.int_array) << "\n";
   std::cout << std::boolalpha << (tget.int64_deck == tput.int64_deck) << "\n";
   std::cout << std::boolalpha << (tget.int_flist == tput.int_flist) << "\n";
+  std::cout << std::boolalpha << (tget.double_set == tput.double_set) << "\n";
 
 
 
   RecursiveType rtput;
+  rtput.st = tput;
   RecursiveType rtget;
   mpi_gather_dummy(rtput, rtget);
+
+  // TESTS
+  std::cout << std::boolalpha << (rtget.st.data == rtput.st.data) << "\n";
+  std::cout << std::boolalpha << (rtget.st.more_data == rtput.st.more_data) << "\n";
+  std::cout << std::boolalpha << (rtget.st.pair_data == rtput.st.pair_data) << "\n";
+  std::cout << std::boolalpha << (rtget.st.double_data == rtput.st.double_data) << "\n";
+  std::cout << std::boolalpha << (rtget.st.double_data_pairs == rtput.st.double_data_pairs) << "\n";
+  std::cout << std::boolalpha << (rtget.st.i == rtput.st.i) << "\n";
+  std::cout << std::boolalpha << (rtget.st.double_list == rtput.st.double_list) << "\n";
+  std::cout << std::boolalpha << (rtget.st.int_array == rtput.st.int_array) << "\n";
+  std::cout << std::boolalpha << (rtget.st.int64_deck == rtput.st.int64_deck) << "\n";
+  std::cout << std::boolalpha << (rtget.st.int_flist == rtput.st.int_flist) << "\n";
+  std::cout << std::boolalpha << (rtget.st.double_set == rtput.st.double_set) << "\n";
 
   std::cin.get();
   return 0;

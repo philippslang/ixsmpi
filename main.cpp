@@ -6,6 +6,13 @@
 #include <list>
 #include <array>
 #include <iterator>
+#include <memory>
+
+
+/*
+TODO
+- reconsider const buffer concept for read buffers... std::ifstream doesnt do that
+*/
 
 
 typedef int64_t  int64_t;
@@ -111,11 +118,20 @@ typename _BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
 /// only be interfaced - via the above three functions
 
 
-template<typename T>
+template<typename O>
 struct BufferTraits
 {
-  typedef _OBuffer<T> Buffer;
+  typedef _OBuffer<O> Buffer;
 }; 
+
+
+template<typename O> inline
+std::unique_ptr<typename BufferTraits<O>::Buffer> make_write_buffer()
+{
+  std::unique_ptr<typename BufferTraits<O>::Buffer> bPtr(nullptr);
+  bPtr.reset(new BufferTraits<O>::Buffer());  
+  return bPtr;
+}
 
 
 /// this is the only external link to the type of container used in
@@ -285,6 +301,7 @@ void operator << (B &b, const T &c)
   save(b, c);
 }
 
+
 template<typename B, typename T> inline
 void operator >> (const B &b, T &c)
 {  
@@ -292,27 +309,44 @@ void operator >> (const B &b, T &c)
 }
 
 
-template<typename B> inline
-void init_load(const B& b)
+/// initialize read buffer iterator for provided intergal type
+template<typename T, typename B> inline
+void initialize_read_buffer_it(const B& b)
 {
+  buffer_iterator<T>(b) = buffer<T>(b).begin();
+}
 
-  buffer_iterator<int>(b) = buffer<int>(b).begin();
-  buffer_iterator<int64_t>(b) = buffer<int64_t>(b).begin(); 
-  buffer_iterator<double>(b) = buffer<double>(b).begin(); 
-  buffer_iterator<size_t>(b) = buffer<size_t>(b).begin(); 
+
+/// initialize read buffer iterators
+template<typename B> inline
+void initialize_read_buffer_its(const B& b)
+{
+  initialize_read_buffer_it<int>(b);
+  initialize_read_buffer_it<int64_t>(b);
+  initialize_read_buffer_it<double>(b);
+  initialize_read_buffer_it<size_t>(b);
 }
 
 
 template<typename O> inline
-void mpi_gather_dummy(const O &tput, O &tget)
+std::unique_ptr<typename BufferTraits<O>::Buffer> make_read_buffer(std::unique_ptr<typename BufferTraits<O>::Buffer>& b)
 {
-  typename BufferTraits<O>::Buffer b;
-  save(b, tput);
+  std::unique_ptr<typename BufferTraits<O>::Buffer> bPtr(b.release());
+  initialize_read_buffer_its(*bPtr);
+  return bPtr;
+}
+
+
+template<typename O> inline
+void mpi_gather_dummy(const O &oput, O &oget)
+{
+  auto wb = make_write_buffer<O>();
+  save(*wb, oput);
 
   // exchange buffer arrays here...
 
-  init_load(b);
-  load(b, tget);
+  const auto rb = make_read_buffer<O>(wb);
+  load(*rb, oget);
 }
 
 

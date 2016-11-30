@@ -1,12 +1,18 @@
 #include <iostream>
-#include <vector>
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
-#include <list>
-#include <array>
 #include <iterator>
 #include <memory>
+
+// sequence containers
+#include <array>
+#include <vector>
+#include <deque>
+#include <forward_list>
+#include <list>
+
+
 
 
 /*
@@ -154,19 +160,27 @@ void fetch_from_buffer(const B &b, D &v)
 }
 
 
+template<typename B, typename C> inline
+  void fetch_size_and_apply(B &b, C &c)
+{
+  auto &bit_size = buffer_iterator<size_t>(b);
+  const auto csize = *bit_size;
+  ++bit_size;
+  c.resize(csize);
+}
+
+
 /// BUFFER INTEGRAL TYPES
 /// for each integral type we support. this results in some code duplication
 /// but gives better compilation errors for unsupported types and also makes
 /// for a clear bottom of recursion
 
 /// int
-
 template<typename B> inline
 void operator << (B &b, int v)
 {
   push_into_buffer(b, v);
 }
-
 template<typename B> inline
 void operator >> (const B &b, int &v)
 {
@@ -175,13 +189,11 @@ void operator >> (const B &b, int &v)
 
 
 /// int64_t
-
 template<typename B> inline
   void operator << (B &b, int64_t v)
 {
   push_into_buffer(b, v);
 }
-
 template<typename B> inline
   void operator >> (const B &b, int64_t &v)
 {
@@ -190,27 +202,15 @@ template<typename B> inline
 
 
 /// double
-
 template<typename B> inline
 void operator << (B &b, double v)
 {
   push_into_buffer(b, v);
 }
-
 template<typename B> inline
   void operator >> (const B &b, double &v)
 {
   fetch_from_buffer(b, v);
-}
-
-
-template<typename B, typename C> inline
-void fetch_and_apply_size(B &b, C &c)
-{
-  auto &bit_size = buffer_iterator<size_t>(b);
-  const auto csize = *bit_size;
-  ++bit_size;
-  c.resize(csize);
 }
 
 
@@ -221,8 +221,14 @@ void fetch_and_apply_size(B &b, C &c)
 template<typename B, typename FwdOutIt> inline
 void insert_range(B &b, FwdOutIt first, FwdOutIt last)
 {
-  push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
   std::for_each(first, last, [&b](const typename std::iterator_traits<FwdOutIt>::reference& v) { b << v; });
+}
+
+template<typename B, typename FwdOutIt> inline
+void insert_range_and_size(B &b, FwdOutIt first, FwdOutIt last)
+{
+  push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
+  insert_range(b, first, last);
 }
 
 
@@ -252,12 +258,12 @@ void operator >> (const B &b, std::pair<D1, D2> &c)
 template<typename B, typename D> inline
 void operator << (B &b, const std::vector<D> &c)
 {
-  insert_range(b, c.begin(), c.end());
+  insert_range_and_size(b, c.begin(), c.end());
 }
 template<typename B, typename D> inline
 void operator >> (const B &b, std::vector<D> &c)
 {  
-  fetch_and_apply_size(b, c);
+  fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
 }
 
@@ -266,14 +272,15 @@ void operator >> (const B &b, std::vector<D> &c)
 template<typename B, typename D> inline
 void operator << (B &b, const std::list<D> &c)
 {
-  insert_range(b, c.begin(), c.end());
+  insert_range_and_size(b, c.begin(), c.end());
 }
 template<typename B, typename D> inline
 void operator >> (const B &b, std::list<D> &c)
 {
-  fetch_and_apply_size(b, c);
+  fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
 }
+
 
 /// array
 template<typename B, typename D, size_t N> inline
@@ -285,6 +292,34 @@ template<typename B, typename D, size_t N> inline
 void operator >> (const B &b, std::array<D, N> &c)
 {
   // fixed width - no resize here
+  fetch_range(b, c.begin(), c.end());
+}
+
+
+/// deque
+template<typename B, typename D> inline
+void operator << (B &b, const std::deque<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::deque<D> &c)
+{
+  fetch_size_and_apply(b, c);
+  fetch_range(b, c.begin(), c.end());
+}
+
+
+/// forward_list
+template<typename B, typename D> inline
+  void operator << (B &b, const std::forward_list<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::forward_list<D> &c)
+{
+  fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
 }
 
@@ -365,6 +400,8 @@ struct SomeType
   int64_t i;
   std::list<double> double_list;
   std::array<int, 3> int_array;
+  std::deque<int64_t> int64_deck;
+  std::forward_list<int> int_flist;
 };
 
 
@@ -379,6 +416,8 @@ void save(Buffer &b, const SomeType &d)
   b << d.i;
   b << d.double_list;
   b << d.int_array;
+  b << d.int64_deck;
+  b << d.int_flist;
 }
 
 
@@ -393,6 +432,8 @@ void load(const Buffer &b, SomeType &d)
   b >> d.i;
   b >> d.double_list;
   b >> d.int_array;
+  b >> d.int64_deck;
+  b >> d.int_flist;
 }
 
 
@@ -424,11 +465,13 @@ int main()
   tput.more_data.insert(tput.more_data.begin(), 18, -3);
   tput.pair_data.first = 8;
   tput.pair_data.second = 3;
-  tput.double_data.insert(tput.double_data.begin(), 12, 1.2);
+  tput.double_data.insert(tput.double_data.begin(), 24, 1.2);
   tput.double_data_pairs.insert(tput.double_data_pairs.begin(), 12, std::make_pair(2.,9.));
   tput.int_array[0] = 12;
   tput.int_array[1] = 8;
   tput.i = 880; 
+  tput.int64_deck = std::deque<int64_t>(800, 123456789101112);
+  tput.int_flist = std::forward_list<int>(42, -9);
  
   // exchange
   SomeType tget;
@@ -444,8 +487,9 @@ int main()
   std::cout << std::boolalpha << (tget.i == tput.i) << "\n";
   std::cout << std::boolalpha << (tget.double_list == tput.double_list) << "\n";
   std::cout << std::boolalpha << (tget.int_array == tput.int_array) << "\n";
+  std::cout << std::boolalpha << (tget.int64_deck == tput.int64_deck) << "\n";
+  std::cout << std::boolalpha << (tget.int_flist == tput.int_flist) << "\n";
 
-  std::cout << tput.i << "\n";
 
 
   RecursiveType rtput;

@@ -455,6 +455,57 @@ template<typename B, typename Dk, typename Dv> inline
 }
 
 
+/// unordered set
+template<typename B, typename D> inline
+  void operator << (B &b, const std::unordered_set<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+  void operator >> (const B &b, std::unordered_set<D> &c)
+{
+  fetch_range_using_insertion<D>(b, c);
+}
+
+
+/// unordered multiset
+template<typename B, typename D> inline
+  void operator << (B &b, const std::unordered_multiset<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+  void operator >> (const B &b, std::unordered_multiset<D> &c)
+{
+  fetch_range_using_insertion<D>(b, c);
+}
+
+
+/// unordered map
+template<typename B, typename Dk, typename Dv> inline
+  void operator << (B &b, const std::unordered_map<Dk, Dv> &c)
+{
+  insert_key_value_range_and_size(b, c);
+}
+template<typename B, typename Dk, typename Dv> inline
+  void operator >> (const B &b, std::unordered_map<Dk, Dv> &c)
+{
+  fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
+}
+
+/// unordered multimap
+template<typename B, typename Dk, typename Dv> inline
+  void operator << (B &b, const std::unordered_multimap<Dk, Dv> &c)
+{
+  insert_key_value_range_and_size(b, c);
+}
+template<typename B, typename Dk, typename Dv> inline
+  void operator >> (const B &b, std::unordered_multimap<Dk, Dv> &c)
+{
+  fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
+}
+
+
 /// RECURSIVE, TYPE-BASED DISPATCHERS
 /// these are used for subtypes that don't have a << op 
 /// implemented, but do have user specified load/save
@@ -538,6 +589,11 @@ struct SomeType
   std::multiset<std::pair<int,double>> multi_set_nested_pair;
   std::map<int, std::vector<double>> map_int_vector_double;
   std::multimap<int, std::set<int64_t>> multimap_int_set_int64_t;
+  std::set<double> double_uset;
+  std::multiset<int64_t> umulti_set;
+  std::multiset<std::pair<int,double>> umulti_set_nested_pair;
+  std::map<int, std::vector<double>> umap_int_vector_double;
+  std::multimap<int, std::set<int64_t>> umultimap_int_set_int64_t;
 };
 
 
@@ -559,6 +615,11 @@ void save(Buffer &b, const SomeType &d)
   b << d.multi_set_nested_pair;
   b << d.map_int_vector_double;
   b << d.multimap_int_set_int64_t;
+  b << d.double_uset;
+  b << d.umulti_set;
+  b << d.umulti_set_nested_pair;
+  b << d.umap_int_vector_double;
+  b << d.umultimap_int_set_int64_t;
 }
 
 
@@ -580,6 +641,11 @@ void load(const Buffer &b, SomeType &d)
   b >> d.multi_set_nested_pair;
   b >> d.map_int_vector_double;
   b >> d.multimap_int_set_int64_t;
+  b >> d.double_uset;
+  b >> d.umulti_set;
+  b >> d.umulti_set_nested_pair;
+  b >> d.umap_int_vector_double;
+  b >> d.umultimap_int_set_int64_t;
 }
 
 
@@ -633,13 +699,25 @@ int main()
   tput.multi_set_nested_pair.insert(std::make_pair(21, 4.02));
   tput.map_int_vector_double[89] = std::vector<double>(19, 36.0);
   tput.map_int_vector_double[98] = std::vector<double>(91, 63.0);
-  /*
-  tput.multimap_int_set_int64_t[1986].insert(546431);
-  tput.multimap_int_set_int64_t[1986].insert(543687);
-  tput.multimap_int_set_int64_t[1986].insert(4683687);
-  tput.multimap_int_set_int64_t[8619].insert(15864);
-  tput.multimap_int_set_int64_t[8619].insert(16578);
-  */
+  std::set<int64_t> set_int64_t;
+  set_int64_t.insert(546431);
+  set_int64_t.insert(543687);
+  set_int64_t.insert(4683687);
+  set_int64_t.insert(15864);
+  std::set<int64_t> set_int64_t0;
+  set_int64_t0.insert(5456431);
+  set_int64_t0.insert(5434687);
+  set_int64_t0.insert(46863687);
+  set_int64_t0.insert(158364);
+  tput.multimap_int_set_int64_t.insert(std::make_pair(1, set_int64_t));
+  tput.multimap_int_set_int64_t.insert(std::make_pair(1, set_int64_t0));
+  tput.multimap_int_set_int64_t.insert(std::make_pair(5, set_int64_t));
+  tput.double_uset = tput.double_set;
+  tput.umulti_set = tput.multi_set;
+  tput.umulti_set_nested_pair = tput.multi_set_nested_pair;
+  tput.umap_int_vector_double = tput.map_int_vector_double;
+  tput.umultimap_int_set_int64_t = tput.multimap_int_set_int64_t;
+  
   // exchange
   SomeType tget;
   mpi_gather_dummy(tput, tget);
@@ -660,6 +738,12 @@ int main()
   std::cout << std::boolalpha << (tget.multi_set == tput.multi_set) << "\n";
   std::cout << std::boolalpha << (tget.multi_set_nested_pair == tput.multi_set_nested_pair) << "\n";
   std::cout << std::boolalpha << (tget.map_int_vector_double == tput.map_int_vector_double) << "\n";
+  std::cout << std::boolalpha << (tget.multimap_int_set_int64_t == tput.multimap_int_set_int64_t) << "\n";
+  std::cout << std::boolalpha << (tget.double_uset == tput.double_uset) << "\n";
+  std::cout << std::boolalpha << (tget.umulti_set == tput.umulti_set) << "\n";
+  std::cout << std::boolalpha << (tget.umulti_set_nested_pair == tput.umulti_set_nested_pair) << "\n";
+  std::cout << std::boolalpha << (tget.umap_int_vector_double == tput.umap_int_vector_double) << "\n";
+  std::cout << std::boolalpha << (tget.umultimap_int_set_int64_t == tput.umultimap_int_set_int64_t) << "\n";
 
 
 
@@ -685,6 +769,12 @@ int main()
   std::cout << std::boolalpha << (rtget.st.multi_set == rtput.st.multi_set) << "\n";
   std::cout << std::boolalpha << (rtget.st.multi_set_nested_pair == rtput.st.multi_set_nested_pair) << "\n";
   std::cout << std::boolalpha << (rtget.st.map_int_vector_double == rtput.st.map_int_vector_double) << "\n";
+  std::cout << std::boolalpha << (rtget.st.multimap_int_set_int64_t == rtput.st.multimap_int_set_int64_t) << "\n";
+  std::cout << std::boolalpha << (rtget.st.double_uset == rtput.st.double_uset) << "\n";
+  std::cout << std::boolalpha << (rtget.st.umulti_set == rtput.st.umulti_set) << "\n";
+  std::cout << std::boolalpha << (rtget.st.umulti_set_nested_pair == rtput.st.umulti_set_nested_pair) << "\n";
+  std::cout << std::boolalpha << (rtget.st.umap_int_vector_double == rtput.st.umap_int_vector_double) << "\n";
+  std::cout << std::boolalpha << (rtget.st.umultimap_int_set_int64_t == rtput.st.umultimap_int_set_int64_t) << "\n";
 
   std::cin.get();
   return 0;

@@ -12,14 +12,24 @@
 #include <forward_list>
 #include <list>
 
-// associative containers
-#include <set>
+// sorted associative containers
+#include <set> // incl multiset
+#include <map> // incl multimap
+
+// unordered associative containers
+#include <unordered_set> // incl unordered_multiset
+#include <unordered_map> // incl unordered_multimap
+
 
 /*
 TODO
 - reconsider const buffer concept for read buffers... std::ifstream doesnt do that
+- initialize buffer with some size
 
 LIMITATIONS
+- integral types: int, double, int64_t
+- size_t not allowed as type --> no mpiutil fcts, used internally
+- needs default ctor available
 - no pointers --> user workaround in load/save
 - no container adaptors (stack, queue, priority_queue) --> user workaround in load/save exposing underlying container
 */
@@ -38,13 +48,14 @@ struct _BufferTraits
 
 struct _OBufferIts
 {
-  typedef std::vector<size_t> BCSizes;
+  typedef std::vector<size_t>     BCSizes;
   typedef BCSizes::const_iterator BCSit;
 
   BCSit bi_sizes;
-  _BufferTraits<int>::BCIterator bi_int;
+
+  _BufferTraits<int>::BCIterator     bi_int;
   _BufferTraits<int64_t>::BCIterator bi_int64_t;
-  _BufferTraits<double>::BCIterator bi_double;
+  _BufferTraits<double>::BCIterator  bi_double;
 };
 
 
@@ -52,9 +63,10 @@ template<typename O>
 struct _OBuffer
 {
   _OBufferIts::BCSizes bc_sizes;
-  typename _BufferTraits<int>::BCType bc_int;
+
+  typename _BufferTraits<int>::BCType     bc_int;
   typename _BufferTraits<int64_t>::BCType bc_int64_t;
-  typename _BufferTraits<double>::BCType bc_double;
+  typename _BufferTraits<double>::BCType  bc_double;
 
   /// because this just keeps track of the state of deserialization - no changes to the buffer itself
   mutable _OBufferIts its; 
@@ -69,34 +81,34 @@ namespace _traits
   template<typename B>
   struct access<int, B>
   {
-    static typename _BufferTraits<int>::BCType& buffer(B &b) { return b.bc_int; }
+    static typename       _BufferTraits<int>::BCType& buffer(B &b) { return b.bc_int; }
     static const typename _BufferTraits<int>::BCType& buffer(const B &b) { return b.bc_int; }
-    static typename _BufferTraits<int>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int; }
+    static typename       _BufferTraits<int>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int; }
   };
 
   template<typename B>
   struct access<int64_t, B>
   {
-    static typename _BufferTraits<int64_t>::BCType& buffer(B &b) { return b.bc_int64_t; }
+    static typename       _BufferTraits<int64_t>::BCType& buffer(B &b) { return b.bc_int64_t; }
     static const typename _BufferTraits<int64_t>::BCType& buffer(const B &b) { return b.bc_int64_t; }
-    static typename _BufferTraits<int64_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int64_t; }
+    static typename       _BufferTraits<int64_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int64_t; }
   };
 
   template<typename B>
   struct access<double, B>
   {
-    static typename _BufferTraits<double>::BCType& buffer(B &b) { return b.bc_double; }
+    static typename       _BufferTraits<double>::BCType& buffer(B &b) { return b.bc_double; }
     static const typename _BufferTraits<double>::BCType& buffer(const B &b) { return b.bc_double; }
-    static typename _BufferTraits<double>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_double; }
+    static typename       _BufferTraits<double>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_double; }
   };
 
   // specialized for container size buffer only, we don't allow for size_t as data type
   template<typename B>
   struct access<size_t, B>
   {
-    static typename _BufferTraits<size_t>::BCType& buffer(B &b) { return b.bc_sizes; }
+    static typename       _BufferTraits<size_t>::BCType& buffer(B &b) { return b.bc_sizes; }
     static const typename _BufferTraits<size_t>::BCType& buffer(const B &b) { return b.bc_sizes; }
-    static typename _BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_sizes; }
+    static typename       _BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_sizes; }
   };
 }
 
@@ -147,6 +159,9 @@ std::unique_ptr<typename BufferTraits<O>::Buffer> make_write_buffer()
 /// this is the only external link to the type of container used in
 /// the buffer - everything else is encapsulated through the stl iterator 
 /// api. at the bottom level (integral types), all << operators end here
+// these three guys should be the only one that actually access the buffer
+// and its iterators
+
 template<typename B, typename D> inline
 void push_into_buffer(B &b, D v)
 {
@@ -228,7 +243,7 @@ template<typename B> inline
 
 /// STL CONTAINERS
 
-/// these should be dispatched to from container entry points, require onle forward iterators
+/// these should be dispatched to from container entry points, require only iterator compliance
 
 template<typename B, typename FwdOutIt> inline
 void insert_range(B &b, FwdOutIt first, FwdOutIt last)
@@ -237,6 +252,26 @@ void insert_range(B &b, FwdOutIt first, FwdOutIt last)
   {
     b << *first;
     ++first;
+  }
+}
+
+
+template<typename B, typename FwdOutIt> inline
+void insert_range_and_size(B &b, FwdOutIt first, FwdOutIt last)
+{
+  push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
+  insert_range(b, first, last);
+}
+
+
+template<typename B, typename C> inline
+void insert_key_value_range_and_size(B &b, const C &c)
+{
+  push_into_buffer(b, static_cast<size_t>(c.size()));
+  for (const auto &v : c)
+  {
+    b << v.first;
+    b << v.second;
   }
 }
 
@@ -252,12 +287,35 @@ void fetch_range(B &b, FwdInIt first, FwdInIt last)
 }
 
 
-template<typename B, typename FwdOutIt> inline
-void insert_range_and_size(B &b, FwdOutIt first, FwdOutIt last)
+// these use insert for when we don't construct the range in advance
+
+template<typename D, typename B, typename C> inline
+void fetch_range_using_insertion(B &b, C&c)
 {
-  push_into_buffer(b, static_cast<size_t>(std::distance(first, last)));
-  insert_range(b, first, last);
+  const auto size = fetch_size(b);  
+  for (size_t i = 0; i < size; ++i)
+  {
+    D tmp;
+    b >> tmp;
+    c.insert(tmp);
+  }
 }
+
+template<typename Dk, typename Dv, typename B, typename C> inline
+void fetch_key_value_range_using_insertion(B &b, C&c)
+{
+  const auto size = fetch_size(b);  
+  for (size_t i = 0; i < size; ++i)
+  {
+    Dk tmpk;
+    Dv tmpv;
+    b >> tmpk;
+    b >> tmpv;
+    c.insert(std::make_pair(tmpk, tmpv));
+  }
+}
+
+
 
 
 
@@ -355,12 +413,50 @@ void operator << (B &b, const std::set<D> &c)
 template<typename B, typename D> inline
 void operator >> (const B &b, std::set<D> &c)
 {
-  
+  fetch_range_using_insertion<D>(b, c);
+}
+
+
+/// multiset
+template<typename B, typename D> inline
+void operator << (B &b, const std::multiset<D> &c)
+{
+  insert_range_and_size(b, c.begin(), c.end());
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::multiset<D> &c)
+{
+  fetch_range_using_insertion<D>(b, c);
+}
+
+
+/// map
+template<typename B, typename Dk, typename Dv> inline
+void operator << (B &b, const std::map<Dk, Dv> &c)
+{
+  insert_key_value_range_and_size(b, c);
+}
+template<typename B, typename Dk, typename Dv> inline
+void operator >> (const B &b, std::map<Dk, Dv> &c)
+{
+  fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
+}
+
+/// multimap
+template<typename B, typename Dk, typename Dv> inline
+  void operator << (B &b, const std::multimap<Dk, Dv> &c)
+{
+  insert_key_value_range_and_size(b, c);
+}
+template<typename B, typename Dk, typename Dv> inline
+  void operator >> (const B &b, std::multimap<Dk, Dv> &c)
+{
+  fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
 }
 
 
 /// RECURSIVE, TYPE-BASED DISPATCHERS
-/// these are used for subtypes that dont have a << op 
+/// these are used for subtypes that don't have a << op 
 /// implemented, but do have user specified load/save
 /// methods. this does namespace based lookup
 
@@ -438,6 +534,10 @@ struct SomeType
   std::deque<int64_t> int64_deck;
   std::forward_list<int> int_flist;
   std::set<double> double_set;
+  std::multiset<int64_t> multi_set;
+  std::multiset<std::pair<int,double>> multi_set_nested_pair;
+  std::map<int, std::vector<double>> map_int_vector_double;
+  std::multimap<int, std::set<int64_t>> multimap_int_set_int64_t;
 };
 
 
@@ -455,6 +555,10 @@ void save(Buffer &b, const SomeType &d)
   b << d.int64_deck;
   b << d.int_flist;
   b << d.double_set;
+  b << d.multi_set;
+  b << d.multi_set_nested_pair;
+  b << d.map_int_vector_double;
+  b << d.multimap_int_set_int64_t;
 }
 
 
@@ -472,11 +576,16 @@ void load(const Buffer &b, SomeType &d)
   b >> d.int64_deck;
   b >> d.int_flist;
   b >> d.double_set;
+  b >> d.multi_set;
+  b >> d.multi_set_nested_pair;
+  b >> d.map_int_vector_double;
+  b >> d.multimap_int_set_int64_t;
 }
 
 
 struct RecursiveType
 {
+  int64_t i;
   SomeType st;
 };
 
@@ -484,6 +593,7 @@ struct RecursiveType
 template<typename Buffer> inline
 void save(Buffer &b, const RecursiveType &d)
 {
+  b << d.i;
   b << d.st;
 }
 
@@ -491,6 +601,7 @@ void save(Buffer &b, const RecursiveType &d)
 template<typename Buffer> inline
 void load(const Buffer &b, RecursiveType &d)
 {
+  b >> d.i;
   b >> d.st;
 }
 
@@ -513,7 +624,22 @@ int main()
   tput.double_set.insert(1.5);
   tput.double_set.insert(2.5);
   tput.double_set.insert(3.0);
- 
+  tput.multi_set.insert(100005000);
+  tput.multi_set.insert(67742);
+  tput.multi_set.insert(67742);
+  tput.multi_set.insert(100005000);
+  tput.multi_set.insert(465);
+  tput.multi_set_nested_pair.insert(std::make_pair(84, 2.01));
+  tput.multi_set_nested_pair.insert(std::make_pair(21, 4.02));
+  tput.map_int_vector_double[89] = std::vector<double>(19, 36.0);
+  tput.map_int_vector_double[98] = std::vector<double>(91, 63.0);
+  /*
+  tput.multimap_int_set_int64_t[1986].insert(546431);
+  tput.multimap_int_set_int64_t[1986].insert(543687);
+  tput.multimap_int_set_int64_t[1986].insert(4683687);
+  tput.multimap_int_set_int64_t[8619].insert(15864);
+  tput.multimap_int_set_int64_t[8619].insert(16578);
+  */
   // exchange
   SomeType tget;
   mpi_gather_dummy(tput, tget);
@@ -531,15 +657,20 @@ int main()
   std::cout << std::boolalpha << (tget.int64_deck == tput.int64_deck) << "\n";
   std::cout << std::boolalpha << (tget.int_flist == tput.int_flist) << "\n";
   std::cout << std::boolalpha << (tget.double_set == tput.double_set) << "\n";
+  std::cout << std::boolalpha << (tget.multi_set == tput.multi_set) << "\n";
+  std::cout << std::boolalpha << (tget.multi_set_nested_pair == tput.multi_set_nested_pair) << "\n";
+  std::cout << std::boolalpha << (tget.map_int_vector_double == tput.map_int_vector_double) << "\n";
 
 
 
   RecursiveType rtput;
+  rtput.i = 424242424242424242;
   rtput.st = tput;
   RecursiveType rtget;
   mpi_gather_dummy(rtput, rtget);
 
   // TESTS
+  std::cout << std::boolalpha << (rtget.i == rtput.i) << "\n";
   std::cout << std::boolalpha << (rtget.st.data == rtput.st.data) << "\n";
   std::cout << std::boolalpha << (rtget.st.more_data == rtput.st.more_data) << "\n";
   std::cout << std::boolalpha << (rtget.st.pair_data == rtput.st.pair_data) << "\n";
@@ -551,6 +682,9 @@ int main()
   std::cout << std::boolalpha << (rtget.st.int64_deck == rtput.st.int64_deck) << "\n";
   std::cout << std::boolalpha << (rtget.st.int_flist == rtput.st.int_flist) << "\n";
   std::cout << std::boolalpha << (rtget.st.double_set == rtput.st.double_set) << "\n";
+  std::cout << std::boolalpha << (rtget.st.multi_set == rtput.st.multi_set) << "\n";
+  std::cout << std::boolalpha << (rtget.st.multi_set_nested_pair == rtput.st.multi_set_nested_pair) << "\n";
+  std::cout << std::boolalpha << (rtget.st.map_int_vector_double == rtput.st.map_int_vector_double) << "\n";
 
   std::cin.get();
   return 0;

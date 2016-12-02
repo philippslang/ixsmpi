@@ -24,12 +24,15 @@
 /*
 TODO
 - reconsider const buffer concept for read buffers... std::ifstream doesnt do that
-- initialize buffer with some size
+- initialize buffer with some size (prepared - just call it)
+- std::enable if
+- smart ptrs
+- tuple - boost fusion for each
 
 LIMITATIONS
+- needs default ctor available
 - integral types: int, double, int64_t
 - size_t not allowed as type --> no mpiutil fcts, used internally
-- needs default ctor available
 - no pointers --> user workaround in load/save
 - no container adaptors (stack, queue, priority_queue) --> user workaround in load/save exposing underlying container
 */
@@ -93,34 +96,34 @@ namespace _traits
   template<typename B>
   struct access<int, B>
   {
-    static typename       _BufferTraits<int>::BCType& buffer(B &b) { return b.bc_int; }
-    static const typename _BufferTraits<int>::BCType& buffer(const B &b) { return b.bc_int; }
-    static typename       _BufferTraits<int>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int; }
+    static typename       _BufferTraits<int>::BCType& buffer (B &b) { return b.bc_int; }
+    static const typename _BufferTraits<int>::BCType& buffer (const B &b) { return b.bc_int; }
+    static typename       _BufferTraits<int>::BCIterator& buffer_iterator (const B &b) { return b.its.bi_int; }
   };
 
   template<typename B>
   struct access<int64_t, B>
   {
-    static typename       _BufferTraits<int64_t>::BCType& buffer(B &b) { return b.bc_int64_t; }
-    static const typename _BufferTraits<int64_t>::BCType& buffer(const B &b) { return b.bc_int64_t; }
-    static typename       _BufferTraits<int64_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_int64_t; }
+    static typename       _BufferTraits<int64_t>::BCType& buffer (B &b) { return b.bc_int64_t; }
+    static const typename _BufferTraits<int64_t>::BCType& buffer (const B &b) { return b.bc_int64_t; }
+    static typename       _BufferTraits<int64_t>::BCIterator& buffer_iterator (const B &b) { return b.its.bi_int64_t; }
   };
 
   template<typename B>
   struct access<double, B>
   {
-    static typename       _BufferTraits<double>::BCType& buffer(B &b) { return b.bc_double; }
-    static const typename _BufferTraits<double>::BCType& buffer(const B &b) { return b.bc_double; }
-    static typename       _BufferTraits<double>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_double; }
+    static typename       _BufferTraits<double>::BCType& buffer (B &b) { return b.bc_double; }
+    static const typename _BufferTraits<double>::BCType& buffer (const B &b) { return b.bc_double; }
+    static typename       _BufferTraits<double>::BCIterator& buffer_iterator (const B &b) { return b.its.bi_double; }
   };
 
   // specialized for container size buffer only, we don't allow for size_t as data type
   template<typename B>
   struct access<size_t, B>
   {
-    static typename       _BufferTraits<size_t>::BCType& buffer(B &b) { return b.bc_sizes; }
-    static const typename _BufferTraits<size_t>::BCType& buffer(const B &b) { return b.bc_sizes; }
-    static typename       _BufferTraits<size_t>::BCIterator& buffer_iterator(const B &b) { return b.its.bi_sizes; }
+    static typename       _BufferTraits<size_t>::BCType& buffer (B &b) { return b.bc_sizes; }
+    static const typename _BufferTraits<size_t>::BCType& buffer (const B &b) { return b.bc_sizes; }
+    static typename       _BufferTraits<size_t>::BCIterator& buffer_iterator (const B &b) { return b.its.bi_sizes; }
   };
 }
 
@@ -129,24 +132,25 @@ namespace _traits
 // directly by anything else, only vie this interface. 
 
 template<typename T, typename B> inline
-typename _BufferTraits<T>::BCType& buffer(B &b)
+typename _BufferTraits<T>::BCType& buffer (B &b)
 {
   return _traits::access<T, B>::buffer(b);
 }
 
 
 template<typename T, typename B> inline
-const typename _BufferTraits<T>::BCType& buffer(const B &b)
+const typename _BufferTraits<T>::BCType& buffer (const B &b)
 {
   return _traits::access<T, B>::buffer(b);
 }
 
 
 template<typename T, typename B> inline
-typename _BufferTraits<T>::BCIterator& buffer_iterator(const B &b)
+typename _BufferTraits<T>::BCIterator& buffer_iterator (const B &b)
 {
   return _traits::access<T, B>::buffer_iterator(b);
 }
+
 
 /// from here on, the buffer, its iterators and types should
 /// only be interfaced - via the above three functions

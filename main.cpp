@@ -43,6 +43,8 @@ struct _BufferTraits
 {
   typedef std::vector<T> BCType;
   typedef typename BCType::const_iterator BCIterator;
+
+  static void alloc (BCType &b, size_t size) { b.reserve(size); }
 }; 
 
 
@@ -50,6 +52,8 @@ struct _OBufferIts
 {
   typedef std::vector<size_t>     BCSizes;
   typedef BCSizes::const_iterator BCSit;
+
+  static void alloc (BCSizes &b, size_t size) { b.reserve(size); }
 
   BCSit bi_sizes;
 
@@ -63,6 +67,14 @@ template<typename O>
 struct _OBuffer
 {
   _OBufferIts::BCSizes bc_sizes;
+
+  void alloc (size_t size)
+  {
+    _OBufferIts::alloc(bc_sizes, size);
+    _BufferTraits<int>::alloc(bc_int, size);
+    _BufferTraits<int64_t>::alloc(bc_int64_t, size);
+    _BufferTraits<double>::alloc(bc_double, size);
+  }
 
   typename _BufferTraits<int>::BCType     bc_int;
   typename _BufferTraits<int64_t>::BCType bc_int64_t;
@@ -147,11 +159,14 @@ struct BufferTraits
 }; 
 
 
+/// num_obj is used as a guess for initial mem alloc only
 template<typename O> inline
-std::unique_ptr<typename BufferTraits<O>::Buffer> make_write_buffer()
+std::unique_ptr<typename BufferTraits<O>::Buffer> make_write_buffer(size_t num_obj=0)
 {
   std::unique_ptr<typename BufferTraits<O>::Buffer> bPtr(nullptr);
-  bPtr.reset(new BufferTraits<O>::Buffer());  
+  bPtr.reset(new BufferTraits<O>::Buffer()); 
+  if(num_obj > 0)
+    bPtr->alloc(num_obj);   
   return bPtr;
 }
 
@@ -314,9 +329,6 @@ void fetch_key_value_range_using_insertion(B &b, C&c)
     c.insert(std::make_pair(tmpk, tmpv));
   }
 }
-
-
-
 
 
 /// pair
@@ -557,6 +569,7 @@ std::unique_ptr<typename BufferTraits<O>::Buffer> make_read_buffer(std::unique_p
 template<typename O> inline
 void mpi_gather_dummy(const O &oput, O &oget)
 {
+  // supply size here for pre allocation
   auto wb = make_write_buffer<O>();
   save(*wb, oput);
 

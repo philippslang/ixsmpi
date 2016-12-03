@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
-#include <memory>
 
 // sequence containers
 #include <array>
@@ -20,20 +19,26 @@
 #include <unordered_set> // incl unordered_multiset
 #include <unordered_map> // incl unordered_multimap
 
+// smart ptrs, pair, tuple
+#include <utility>
+#include <memory>
+#include <tuple>
+
 
 /*
 TODO
 - reconsider const buffer concept for read buffers... std::ifstream doesnt do that
 - initialize buffer with some size (prepared - just call it)
-- std::enable if
-- smart ptrs
 - tuple - boost fusion for each
+- namespace
+- iteartor methods
+- splitting if too large
 
 LIMITATIONS
 - needs default ctor available
 - integral types: int, double, int64_t
 - size_t not allowed as type --> no mpiutil fcts, used internally
-- no pointers --> user workaround in load/save
+- no raw pointers --> user workaround in load/save
 - no container adaptors (stack, queue, priority_queue) --> user workaround in load/save exposing underlying container
 */
 
@@ -226,7 +231,7 @@ namespace _ittraits
   template<typename T>
   struct bintypes
   {
-    typedef std::integral_constant<bool, false> is_bintype;
+    typedef std::false_type is_bintype;
   };
 
   template<>
@@ -349,6 +354,7 @@ void fetch_range_using_insertion(B &b, C&c)
   }
 }
 
+
 template<typename Dk, typename Dv, typename B, typename C> inline
 void fetch_key_value_range_using_insertion(B &b, C&c)
 {
@@ -366,7 +372,7 @@ void fetch_key_value_range_using_insertion(B &b, C&c)
 
 namespace _ctraits
 {
-  template<typename... Args>
+  template<typename... params>
   struct stl_ducks
   {
     static constexpr bool vector_duck = false;
@@ -374,8 +380,8 @@ namespace _ctraits
     static constexpr bool map_duck = false;
   };
 
-  template<typename... Args>
-  struct stl_ducks<std::vector<Args...>>
+  template<typename... params>
+  struct stl_ducks<std::vector<params...>>
   {
     static constexpr bool vector_duck = true;
     static constexpr bool set_duck = false;
@@ -400,13 +406,13 @@ void operator >> (const B &b, std::pair<D1, D2> &c)
 
 
 /// vector
-template<typename B, typename... Args> inline
-void operator << (B &b, const std::vector<Args...> &c)
+template<typename B, typename... params> inline
+void operator << (B &b, const std::vector<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename... Args> inline
-void operator >> (const B &b, std::vector<Args...> &c)
+template<typename B, typename... params> inline
+void operator >> (const B &b, std::vector<params...> &c)
 {  
   fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
@@ -414,13 +420,13 @@ void operator >> (const B &b, std::vector<Args...> &c)
 
 
 /// list
-template<typename B, typename... Args> inline
-void operator << (B &b, const std::list<Args...> &c)
+template<typename B, typename... params> inline
+void operator << (B &b, const std::list<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename... Args> inline
-void operator >> (const B &b, std::list<Args...> &c)
+template<typename B, typename... params> inline
+void operator >> (const B &b, std::list<params...> &c)
 {
   fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
@@ -442,13 +448,13 @@ void operator >> (const B &b, std::array<D, N> &c)
 
 
 /// deque
-template<typename B, typename... Args> inline
-void operator << (B &b, const std::deque<Args...> &c)
+template<typename B, typename... params> inline
+void operator << (B &b, const std::deque<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename... Args> inline
-void operator >> (const B &b, std::deque<Args...> &c)
+template<typename B, typename... params> inline
+void operator >> (const B &b, std::deque<params...> &c)
 {
   fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
@@ -456,13 +462,13 @@ void operator >> (const B &b, std::deque<Args...> &c)
 
 
 /// forward_list
-template<typename B, typename... Args> inline
-  void operator << (B &b, const std::forward_list<Args...> &c)
+template<typename B, typename... params> inline
+  void operator << (B &b, const std::forward_list<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename... Args> inline
-void operator >> (const B &b, std::forward_list<Args...> &c)
+template<typename B, typename... params> inline
+void operator >> (const B &b, std::forward_list<params...> &c)
 {
   fetch_size_and_apply(b, c);
   fetch_range(b, c.begin(), c.end());
@@ -470,25 +476,25 @@ void operator >> (const B &b, std::forward_list<Args...> &c)
 
 
 /// set
-template<typename B, typename... Args> inline
-void operator << (B &b, const std::set<Args...> &c)
+template<typename B, typename... params> inline
+void operator << (B &b, const std::set<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename D, typename... Args> inline
-void operator >> (const B &b, std::set<D, Args...> &c)
+template<typename B, typename D, typename... params> inline
+void operator >> (const B &b, std::set<D, params...> &c)
 {
   fetch_range_using_insertion<D>(b, c);
 }
 
 
 /// multiset
-template<typename B, typename... Args> inline
-void operator << (B &b, const std::multiset<Args...> &c)
+template<typename B, typename... params> inline
+void operator << (B &b, const std::multiset<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename D, typename... Args> inline
+template<typename B, typename D, typename... params> inline
 void operator >> (const B &b, std::multiset<D> &c)
 {
   fetch_range_using_insertion<D>(b, c);
@@ -496,78 +502,145 @@ void operator >> (const B &b, std::multiset<D> &c)
 
 
 /// map
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-void operator << (B &b, const std::map<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+void operator << (B &b, const std::map<Dk, Dv, params...> &c)
 {
   insert_key_value_range_and_size(b, c);
 }
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-void operator >> (const B &b, std::map<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+void operator >> (const B &b, std::map<Dk, Dv, params...> &c)
 {
   fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
 }
 
+
 /// multimap
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator << (B &b, const std::multimap<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator << (B &b, const std::multimap<Dk, Dv, params...> &c)
 {
   insert_key_value_range_and_size(b, c);
 }
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator >> (const B &b, std::multimap<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator >> (const B &b, std::multimap<Dk, Dv, params...> &c)
 {
   fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
 }
 
 
 /// unordered set
-template<typename B, typename... Args> inline
-  void operator << (B &b, const std::unordered_set<Args...> &c)
+template<typename B, typename... params> inline
+  void operator << (B &b, const std::unordered_set<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename D, typename... Args> inline
-  void operator >> (const B &b, std::unordered_set<D, Args...> &c)
+template<typename B, typename D, typename... params> inline
+  void operator >> (const B &b, std::unordered_set<D, params...> &c)
 {
   fetch_range_using_insertion<D>(b, c);
 }
 
 
 /// unordered multiset
-template<typename B, typename... Args> inline
-  void operator << (B &b, const std::unordered_multiset<Args...> &c)
+template<typename B, typename... params> inline
+  void operator << (B &b, const std::unordered_multiset<params...> &c)
 {
   insert_range_and_size(b, c.begin(), c.end());
 }
-template<typename B, typename D, typename... Args> inline
-  void operator >> (const B &b, std::unordered_multiset<D, Args...> &c)
+template<typename B, typename D, typename... params> inline
+  void operator >> (const B &b, std::unordered_multiset<D, params...> &c)
 {
   fetch_range_using_insertion<D>(b, c);
 }
 
 
 /// unordered map
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator << (B &b, const std::unordered_map<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator << (B &b, const std::unordered_map<Dk, Dv, params...> &c)
 {
   insert_key_value_range_and_size(b, c);
 }
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator >> (const B &b, std::unordered_map<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator >> (const B &b, std::unordered_map<Dk, Dv, params...> &c)
 {
   fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
 }
 
+
 /// unordered multimap
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator << (B &b, const std::unordered_multimap<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator << (B &b, const std::unordered_multimap<Dk, Dv, params...> &c)
 {
   insert_key_value_range_and_size(b, c);
 }
-template<typename B, typename Dk, typename Dv, typename... Args> inline
-  void operator >> (const B &b, std::unordered_multimap<Dk, Dv, Args...> &c)
+template<typename B, typename Dk, typename Dv, typename... params> inline
+  void operator >> (const B &b, std::unordered_multimap<Dk, Dv, params...> &c)
 {
   fetch_key_value_range_using_insertion<Dk, Dv>(b, c);
+}
+
+
+/// unique ptr
+template<typename B, typename D> inline
+void operator << (B &b, const std::unique_ptr<D> &p)
+{
+  b << *p;
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::unique_ptr<D> &p)
+{
+  p = std::make_unique<D>();
+  b >> *p;
+}
+
+
+/// shared ptr
+template<typename B, typename D> inline
+void operator << (B &b, const std::shared_ptr<D> &p)
+{
+  b << *p;
+}
+template<typename B, typename D> inline
+void operator >> (const B &b, std::shared_ptr<D> &p)
+{
+  p = std::make_shared<D>();
+  b >> *p;
+}
+
+
+/// tuple
+template<typename B, std::size_t I = 0, typename... params> inline
+typename std::enable_if<I == sizeof...(params)>::type
+lshift(B &b, const std::tuple<params...>& t)
+{ 
+}
+template<typename B, std::size_t I = 0, typename... params> inline
+typename std::enable_if<I < sizeof...(params)>::type
+lshift(B &b, const std::tuple<params...>& t)
+{
+  b << std::get<I>(t);
+  lshift<B, I + 1, params...>(b, t);
+}
+template<typename B, std::size_t I = 0, typename... params> inline
+typename std::enable_if<I == sizeof...(params)>::type
+rshift(const B &b, std::tuple<params...>& t)
+{
+}
+template<typename B, std::size_t I = 0, typename... params> inline
+typename std::enable_if<I < sizeof...(params)>::type
+rshift(const B &b, std::tuple<params...>& t)
+{
+  b >> std::get<I>(t);
+  rshift<B, I + 1, params...>(b, t);
+}
+template<typename B, typename... params> inline
+void operator << (B &b, const std::tuple<params...> &c)
+{
+  lshift(b, c);
+}
+template<typename B, typename... params> inline
+void operator >> (const B &b, std::tuple<params...> &c)
+{
+  rshift(b, c);
 }
 
 
@@ -620,7 +693,7 @@ std::unique_ptr<typename BufferTraits<O>::Buffer> make_read_buffer(std::unique_p
 
 
 template<typename O> inline
-void mpi_gather_dummy(const O &oput, O &oget)
+O mpi_gather_dummy(const O &oput)
 {
   // supply size here for pre allocation
   auto wb = make_write_buffer<O>();
@@ -629,7 +702,11 @@ void mpi_gather_dummy(const O &oput, O &oget)
   // exchange buffer arrays here...
 
   const auto rb = make_read_buffer<O>(wb);
+
+  O oget;
   *rb >> oget;
+
+  return oget;
 }
 
 
@@ -719,6 +796,9 @@ struct RecursiveType
 {
   int64_t i;
   SomeType st;
+  std::unique_ptr<int> int_uptr;
+  std::shared_ptr<std::set<int>> setint_sptr;
+  std::tuple<int64_t, double, int> t;
 };
 
 
@@ -727,6 +807,9 @@ void save(Buffer &b, const RecursiveType &d)
 {
   b << d.i;
   b << d.st;
+  b << d.int_uptr;
+  b << d.setint_sptr;
+  b << d.t;
 }
 
 
@@ -735,6 +818,9 @@ void load(const Buffer &b, RecursiveType &d)
 {
   b >> d.i;
   b >> d.st;
+  b >> d.int_uptr;
+  b >> d.setint_sptr;
+  b >> d.t;
 }
 
 
@@ -784,9 +870,9 @@ int main()
   tput.umap_int_vector_double = tput.map_int_vector_double;
   tput.umultimap_int_set_int64_t = tput.multimap_int_set_int64_t;
   
+
   // exchange
-  SomeType tget;
-  mpi_gather_dummy(tput, tget);
+  auto tget = mpi_gather_dummy(tput);
 
 
   // TESTS
@@ -812,12 +898,19 @@ int main()
   std::cout << std::boolalpha << (tget.umultimap_int_set_int64_t == tput.umultimap_int_set_int64_t) << "\n";
 
 
-
   RecursiveType rtput;
+  rtput.setint_sptr.reset(new std::set<int>);
+  rtput.setint_sptr->insert(213);
+  rtput.setint_sptr->insert(890);
+  rtput.int_uptr.reset(new int);
+  *rtput.int_uptr = 9;
   rtput.i = 424242424242424242;
   rtput.st = tput;
-  RecursiveType rtget;
-  mpi_gather_dummy(rtput, rtget);
+  std::get<0>(rtput.t) = 5;
+  std::get<1>(rtput.t) = 1.2;
+  std::get<2>(rtput.t) = 9;
+  auto rtget = mpi_gather_dummy(rtput);
+
 
   // TESTS
   std::cout << std::boolalpha << (rtget.i == rtput.i) << "\n";
@@ -841,11 +934,13 @@ int main()
   std::cout << std::boolalpha << (rtget.st.umulti_set_nested_pair == rtput.st.umulti_set_nested_pair) << "\n";
   std::cout << std::boolalpha << (rtget.st.umap_int_vector_double == rtput.st.umap_int_vector_double) << "\n";
   std::cout << std::boolalpha << (rtget.st.umultimap_int_set_int64_t == rtput.st.umultimap_int_set_int64_t) << "\n";
+  std::cout << std::boolalpha << (*rtget.int_uptr == *rtput.int_uptr) << "\n";
+  std::cout << std::boolalpha << (*rtget.setint_sptr == *rtput.setint_sptr) << "\n";
 
 
-  decltype(set_int64_t0) set_int64_t0_get;
-  mpi_gather_dummy(set_int64_t0, set_int64_t0_get);
+  auto set_int64_t0_get = mpi_gather_dummy(set_int64_t0);
   std::cout << std::boolalpha << (set_int64_t0  == set_int64_t0_get) << "\n";
+
 
   std::cin.get();
   return 0;

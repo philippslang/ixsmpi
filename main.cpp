@@ -174,8 +174,10 @@ std::unique_ptr<typename BufferTraits<O>::Buffer> make_write_buffer(size_t num_o
 {
   std::unique_ptr<typename BufferTraits<O>::Buffer> bPtr(nullptr);
   bPtr.reset(new BufferTraits<O>::Buffer()); 
+
   if(num_obj > 0)
     bPtr->alloc(num_obj);   
+
   return bPtr;
 }
 
